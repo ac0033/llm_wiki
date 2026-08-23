@@ -1,0 +1,20 @@
+# 候选文献评分细则
+# 总分 = 各维度得分(0~1) × 权重 × 100，满分 100。
+# weekly_update.py 用本细则给候选打分，再按 thresholds 分流。
+
+weights:
+  relevance: 0.5        # 与研究方向关键词的命中程度（标题 + 摘要）
+  recency: 0.2          # 发表时间新鲜度，按 recency_half_life_days 指数衰减
+  source_quality: 0.3   # 来源可信度权重，见 source_weights
+
+source_weights:
+  arxiv: 0.8
+  openalex: 0.7
+  semantic_scholar: 0.7
+
+thresholds:
+  auto_include: 80      # >= 80：直接进入 digest，等待人工确认入库
+  review: 50            # 50~79：进 review_queue 待人工复核
+                        # < 50：标记为 dropped，不再处理
+
+recency_half_life_days: 180

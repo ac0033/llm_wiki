@@ -1,0 +1,26 @@
+# Python / uv
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+
+# 大文件原始素材按需保留（PDF、HTML 快照不入库）
+raw/papers/*.pdf
+raw/articles/*.html
+raw/assets/*.png
+raw/assets/*.jpg
+raw/assets/*.jpeg
+
+# 运行期产物
+data/logs/weekly/*.log
+data/logs/weekly/*.json
+data/logs/weekly/*.jsonl
+scripts/register_weekly_task.ps1
+
+# 编辑器 / 系统
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

@@ -1,0 +1,34 @@
+# 研究方向：AI Agent Harness
+# keywords 用于 fetch_candidates 检索和 weekly_update 的 relevance 打分；
+# seed_pages 列出本方向在 wiki 中的核心页面 slug。
+
+slug: ai-agent-harness
+title: "AI Agent Harness（智能体运行时脚手架）"
+description: >
+  关注驱动 LLM agent 运行的脚手架层：agentic loop 的组织方式、context 的构造与压缩、
+  tool 的定义与调度、错误恢复、沙箱执行、评测方法。对应 wiki 页面 [[agent-harness]]。
+
+keywords:
+  - agent harness
+  - agentic loop
+  - LLM agent
+  - tool use
+  - function calling
+  - context management
+  - context engineering
+  - context window
+  - coding agent
+  - SWE-bench
+  - agent benchmark
+  - scaffolding
+  - ReAct
+  - tool orchestration
+  - sandbox
+  - multi-step reasoning
+
+seed_pages:
+  - agent-harness
+  - context-manager
+  - swe-bench
+  - react
+  - openhands

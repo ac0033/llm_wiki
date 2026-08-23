@@ -1,0 +1,31 @@
+[project]
+name = "llm-wiki"
+version = "0.1.0"
+description = "AI Agent（重点：Agent Harness）文献知识库的抓取、入库与维护基础设施"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "httpx>=0.27",
+    "pydantic>=2.7",
+    "PyYAML>=6.0",
+    "python-frontmatter>=1.1",
+    "rapidfuzz>=3.9",
+    "tenacity>=8.4",
+    "PyMuPDF>=1.24",
+    "feedparser>=6.0",
+    "trafilatura>=1.12",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.2",
+]
+
+# 本仓库是"脚本 + 数据"型项目，不发布为包；uv sync 只安装依赖环境。
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# Windows 本机默认 TEMP 在某些权限策略下不可写；把 pytest 临时目录固定到项目内。
+addopts = "--basetemp=.pytest_cache/tmp"

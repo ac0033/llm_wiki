@@ -1,0 +1,31 @@
+# 候选文献来源配置
+# 每个来源的 base_url 为官方 API 端点；query 为该来源的检索表达式。
+# enabled: false 的来源会被 fetch_candidates.py 跳过。
+
+watermark_file: data/state/sync_state.json
+
+sources:
+  arxiv:
+    enabled: true
+    base_url: "https://export.arxiv.org/api/query"
+    # arXiv Atom API；categories 限定检索范围，query 为全文检索表达式
+    categories: ["cs.AI", "cs.CL", "cs.SE", "cs.LG", "cs.MA"]
+    query: 'all:"LLM agent" OR all:"agent harness" OR all:"agentic" OR all:"tool use" OR all:"coding agent"'
+    max_results_per_request: 100
+
+  openalex:
+    enabled: true
+    base_url: "https://api.openalex.org/works"
+    # OpenAlex Works API，search 为全文检索字段
+    query: "LLM agent harness tool use"
+    # 礼貌池建议填写联系邮箱，可留空
+    mailto: ""
+    per_page: 50
+
+  semantic_scholar:
+    # 未认证请求容易触发 429；如需启用，先设置 SEMANTIC_SCHOLAR_API_KEY，再把 enabled 改为 true。
+    enabled: false
+    base_url: "https://api.semanticscholar.org/graph/v1/paper/search"
+    query: "LLM agent tool use harness"
+    fields: "title,abstract,authors,url,externalIds,publicationDate"
+    per_page: 50

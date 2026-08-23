@@ -75,7 +75,7 @@ evidence_sources:              # concept / system / benchmark / comparison 建�
 
 - **可写**：`wiki/`（除 `index.md` 的自动索引区块外）、`data/review_queue/`、`data/logs/`、`wiki/log.md` 的追加。
 - **只读**：`scripts/`、`config/`、`tests/`、`data/registry/`、`data/state/`、`raw/` 既有文件、`pyproject.toml`。
-- **需人工确认**：安装新依赖、注册计划任务、执行任何 git 变更、删除任何文件。
+- **需人工确认**：安装新依赖、注册计划任务、删除任何文件。git 变更默认需人工确认，唯一例外是 `service/` 层在变更性操作前后自动执行的快照 commit（snapshot），用于保证可回滚。
 
 ## 七、工程约定
 

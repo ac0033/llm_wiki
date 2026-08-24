@@ -16,14 +16,22 @@ SNAPSHOT_AUTHOR_EMAIL = "kb-service@local"
 
 
 def _git(repo: Path, *args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
-    result = subprocess.run(
-        ["git", *args],
-        cwd=repo,
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-    )
+    try:
+        result = subprocess.run(
+            ["git", *args],
+            cwd=repo,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            # stdin 必须是 DEVNULL：服务进程的 stdin 是 MCP stdio 管道，git 在
+            # Windows 上遇到文件占用时会向 stdin 询问 "Should I try again?"，
+            # 继承管道会永久挂起；给 EOF 让 git 直接报错返回。
+            stdin=subprocess.DEVNULL,
+            timeout=120,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise RuntimeError(f"git {' '.join(args)} 超时（120s）") from exc
     if check and result.returncode != 0:
         raise RuntimeError(
             f"git {' '.join(args)} 失败（exit {result.returncode}）：{result.stderr.strip()}"

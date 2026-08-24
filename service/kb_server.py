@@ -61,6 +61,9 @@ def _run_script(*args: str) -> subprocess.CompletedProcess[str]:
         encoding="utf-8",
         errors="replace",
         timeout=SCRIPT_TIMEOUT_SECONDS,
+        # stdin 给 DEVNULL：本进程 stdin 是 MCP stdio 管道，子进程意外等待
+        # 输入会永久挂起；EOF 让它们直接报错或按默认行为继续。
+        stdin=subprocess.DEVNULL,
     )
 
 

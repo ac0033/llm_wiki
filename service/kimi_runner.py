@@ -46,6 +46,9 @@ def _run_subprocess(cmd: list[str], cwd: Path) -> subprocess.CompletedProcess[st
         encoding="utf-8",
         errors="replace",
         timeout=KIMI_TIMEOUT_SECONDS,
+        # stdin 给 DEVNULL：本进程 stdin 是 MCP stdio 管道，子进程（kimi 等）
+        # 若意外等待输入会永久挂起；EOF 让它们直接报错或按默认行为继续。
+        stdin=subprocess.DEVNULL,
     )
 
 

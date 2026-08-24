@@ -63,6 +63,7 @@ evidence_sources:              # concept / system / benchmark / comparison 建�
 3. **weekly（每周更新）**：`scripts/fetch_candidates.py` 拉取候选并写 registry；`scripts/weekly_update.py` 去重评分、生成 `data/review_queue/` 复核清单和 `wiki/digests/` 周报；`scripts/weekly_compile.ps1` 在正式运行时串联 fetch → weekly_update → lint → agent-memory 记忆服务预检 → `kimi -p --output-format stream-json` → compile_index → lint。`scripts/install_weekly_task.ps1` 只生成注册脚本，不直接注册计划任务。weekly_compile 收尾时必须做「复核交接」（见 `prompts/weekly_compile.md` 第 9 步）：在周报和复核清单末尾汇总待复核条目、清单路径与确认方式；人工复核在 Kimi Code 交互会话中进行（对 Kimi 说「带我过一遍本周待复核清单」），由 Kimi 逐条讲解并把确认/否决决定写回复核清单。复核清单中的 `[x]` 表示 LLM 已给出推荐/暂缓建议，不代表人已确认。
 4. **lint（体检）**：`scripts/lint_wiki.py` 检查 schema、坏链、重复、孤儿页、缺 URL、概念证据不足、90 天 stale；CI 或每次大批量编辑后必跑。
 5. **chat（主动对话）**：仓库根目录的 `chat.ps1` 唤起 Kimi Code 交互会话（`.\chat.ps1` 新会话、`-Continue` 续最近一次、`-Pick` 从历史会话中选择）。会话记录由 CLI 自动持久化在 `~/.kimi-code/sessions/` 下按工作目录分组。
+6. **service（MCP 接入层）**：`service/` 是供 dsh（deepseek-harness）以 MCP stdio 方式调用的薄层（`uv run python -m service.kb_server`），工具：`kb_query`（只读查询，走 `kimi -p` agentic 检索，专属会话 id 存 `data/state/kb_session.json`）、`kb_ingest`（单篇入库）、`kb_lint`、`kb_reindex`。变更性操作前后自动 git 快照（`service/snapshot.py`，身份用 `git -c` 单次注入）；只读操作不触发快照。service 层不改 scripts/ 既有逻辑，只做编排。
 
 ## 五、长期记忆（agent-memory）
 

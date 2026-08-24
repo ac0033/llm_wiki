@@ -1,2 +1,3 @@
 - 2026-08-23 查询：agent harness（执行壳）的核心定义 → 依据 wiki/concepts/agent-harness.md（主）、wiki/directions/ai-agent-harness.md（辅）回答。
 - 2026-08-23 查询（重复提问）：agent harness（执行壳）的核心定义 → 依据 wiki/concepts/agent-harness.md（主）、wiki/directions/ai-agent-harness.md（辅）回答，答案与上一条一致。
+- 2026-08-24 查询（第三次）：agent harness（执行壳）的核心定义 → 依据 wiki/concepts/agent-harness.md（主）、wiki/directions/ai-agent-harness.md（辅）回答，答案与前两次一致。

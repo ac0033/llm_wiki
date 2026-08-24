@@ -98,7 +98,8 @@ def kb_ingest(source: str) -> str:
     template = (REPO_ROOT / "prompts" / "ingest_source.md").read_text(encoding="utf-8")
     prompt = INGEST_PROMPT_TEMPLATE.format(source=source, template=template)
     try:
-        answer = kimi_runner.run_kimi(prompt)
+        # 写正文是完整 agent 循环（读原文、改页、跑 lint/compile_index），实测超过 5 分钟
+        answer = kimi_runner.run_kimi(prompt, timeout=900)
     except kimi_runner.KimiError as exc:
         return (
             f"脚本入库已完成，但 kimi 完善正文失败：{exc}\n"

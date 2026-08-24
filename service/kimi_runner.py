@@ -36,7 +36,9 @@ class KimiError(RuntimeError):
     """kimi 子进程调用失败（非会话损坏类错误，或重试后仍失败）。"""
 
 
-def _run_subprocess(cmd: list[str], cwd: Path) -> subprocess.CompletedProcess[str]:
+def _run_subprocess(
+    cmd: list[str], cwd: Path, timeout: int = KIMI_TIMEOUT_SECONDS
+) -> subprocess.CompletedProcess[str]:
     """执行子进程的唯一入口，测试里替换这个函数即可 mock kimi。"""
     return subprocess.run(
         cmd,
@@ -45,7 +47,7 @@ def _run_subprocess(cmd: list[str], cwd: Path) -> subprocess.CompletedProcess[st
         text=True,
         encoding="utf-8",
         errors="replace",
-        timeout=KIMI_TIMEOUT_SECONDS,
+        timeout=timeout,
         # stdin 给 DEVNULL：本进程 stdin 是 MCP stdio 管道，子进程（kimi 等）
         # 若意外等待输入会永久挂起；EOF 让它们直接报错或按默认行为继续。
         stdin=subprocess.DEVNULL,
@@ -128,21 +130,26 @@ def run_kimi(
     session_path: Path = SESSION_FILE,
     repo: Path = REPO_ROOT,
     runner=_run_subprocess,
+    timeout: int = KIMI_TIMEOUT_SECONDS,
 ) -> str:
     """调用 kimi 执行一个 prompt，返回回答文本。
 
     - 有已保存会话则带 ``--session`` 恢复；会话损坏时自动降级为新会话重试一次；
     - 调用前预检 agent-memory 服务，不可达时照常执行，但在结果末尾注明降级；
-    - 每次成功调用后把 stream-json 里的 session_id 持久化到 session_path。
+    - 每次成功调用后把 stream-json 里的 session_id 持久化到 session_path；
+    - ``timeout`` 传给子进程；超时统一转成 KimiError（ingest 类长任务可调大）。
     """
     memory_ok = memory_service_available()
 
-    session_id = _load_session_id(session_path)
-    proc = runner(_build_cmd(prompt, session_id), repo)
-    if _session_broken(proc):
-        # 会话损坏：丢弃旧 id，以新会话重试一次
-        session_id = None
-        proc = runner(_build_cmd(prompt, None), repo)
+    try:
+        session_id = _load_session_id(session_path)
+        proc = runner(_build_cmd(prompt, session_id), repo, timeout=timeout)
+        if _session_broken(proc):
+            # 会话损坏：丢弃旧 id，以新会话重试一次
+            session_id = None
+            proc = runner(_build_cmd(prompt, None), repo, timeout=timeout)
+    except subprocess.TimeoutExpired as exc:
+        raise KimiError(f"kimi 调用超时（{timeout}s）") from exc
     if proc.returncode != 0:
         raise KimiError(
             f"kimi 调用失败（exit {proc.returncode}）：{(proc.stderr or '').strip()}"

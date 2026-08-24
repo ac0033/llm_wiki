@@ -38,7 +38,7 @@ def memory_ok(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_first_run_without_session_then_persist(tmp_path: Path) -> None:
     calls: list[list[str]] = []
 
-    def fake(cmd: list[str], cwd: Path) -> subprocess.CompletedProcess[str]:
+    def fake(cmd: list[str], cwd: Path, timeout: int = 300) -> subprocess.CompletedProcess[str]:
         calls.append(cmd)
         return ok_proc("答案甲", "session_new")
 
@@ -62,7 +62,7 @@ def test_resume_with_saved_session(tmp_path: Path) -> None:
     session_path.write_text(json.dumps({"session_id": "session_old"}), encoding="utf-8")
     calls: list[list[str]] = []
 
-    def fake(cmd: list[str], cwd: Path) -> subprocess.CompletedProcess[str]:
+    def fake(cmd: list[str], cwd: Path, timeout: int = 300) -> subprocess.CompletedProcess[str]:
         calls.append(cmd)
         return ok_proc("答案乙", "session_newer")
 
@@ -83,7 +83,7 @@ def test_broken_session_falls_back_to_new_session(tmp_path: Path) -> None:
     session_path.write_text(json.dumps({"session_id": "session_gone"}), encoding="utf-8")
     calls: list[list[str]] = []
 
-    def fake(cmd: list[str], cwd: Path) -> subprocess.CompletedProcess[str]:
+    def fake(cmd: list[str], cwd: Path, timeout: int = 300) -> subprocess.CompletedProcess[str]:
         calls.append(cmd)
         if len(calls) == 1:
             return subprocess.CompletedProcess(
@@ -108,7 +108,7 @@ def test_memory_service_unreachable_degrades(
 ) -> None:
     monkeypatch.setattr(kimi_runner, "memory_service_available", lambda: False)
 
-    def fake(cmd: list[str], cwd: Path) -> subprocess.CompletedProcess[str]:
+    def fake(cmd: list[str], cwd: Path, timeout: int = 300) -> subprocess.CompletedProcess[str]:
         return ok_proc("正常答案", "session_x")
 
     answer = run_kimi("查询", session_path=tmp_path / "s.json",

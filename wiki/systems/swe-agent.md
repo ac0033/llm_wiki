@@ -20,7 +20,7 @@ evidence_sources:
 ---
 # SWE-agent
 
-SWE-agent 是普林斯顿大学团队（John Yang、Carlos Jimenez 等）开发的 Agent 系统，论文 "SWE-agent: Agent-Computer Interfaces Enable Automated Software Engineering"（[[arxiv-2405-15793]]，arXiv:2405.15793）。它最出名的身份是 [[swe-bench]] 上最早的一批高分系统，但它对 [[agent-harness]] 研究的真正贡献是一个明确的概念：**ACI（Agent-Computer Interface，智能体-计算机接口）**——正如 HCI 研究人机接口，为 LLM 设计的命令、反馈格式和防护栏会显著影响 Agent 表现，这部分设计和模型能力是两回事，需要单独优化。
+SWE-agent 是普林斯顿大学团队（John Yang、Carlos Jimenez 等）开发的 Agent 系统，论文 "SWE-agent: Agent-Computer Interfaces Enable Automated Software Engineering"（arXiv:2405.15793）。它最出名的身份是 [[swe-bench]] 上最早的一批高分系统，但它对 [[agent-harness]] 研究的真正贡献是一个明确的概念：**ACI（Agent-Computer Interface，智能体-计算机接口）**——正如 HCI 研究人机接口，为 LLM 设计的命令、反馈格式和防护栏会显著影响 Agent 表现，这部分设计和模型能力是两回事，需要单独优化。
 
 ## 按六组件拆解 Harness
 

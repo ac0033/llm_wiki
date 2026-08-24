@@ -9,7 +9,7 @@
 
 <!-- INDEX:BEGIN -->
 
-共 56 个页面。本区块由 compile_index.py 重建，勿手改。
+共 55 个页面。本区块由 compile_index.py 重建，勿手改。
 
 ## 总览（1）
 
@@ -49,9 +49,8 @@
 - [[openhands]] — OpenHands（草稿）
 - [[swe-agent]] — SWE-agent（草稿）
 
-## 论文（19）
+## 论文（18）
 
-- [[arxiv-2405-15793]] — SWE-agent: Agent-Computer Interfaces Enable Automated Software Engineering
 - [[arxiv-2307-03172]] — Lost in the Middle: How Language Models Use Long Contexts
 - [[arxiv-2309-02427]] — Cognitive Architectures for Language Agents
 - [[arxiv-2310-08560]] — MemGPT: Towards LLMs as Operating Systems

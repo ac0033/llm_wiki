@@ -25,6 +25,7 @@ from service.snapshot import post_snapshot, pre_snapshot
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
 SCRIPT_TIMEOUT_SECONDS = 300  # ingest 涉及网络抓取，给足 5 分钟
+QUERY_TIMEOUT_SECONDS = 600  # kb_query 的 kimi 检索循环：典型 1 分钟内，复杂查询留足 10 分钟
 
 mcp = FastMCP("llm-wiki-kb")
 
@@ -80,7 +81,7 @@ def _format_proc(proc: subprocess.CompletedProcess[str]) -> str:
 def kb_query(question: str) -> str:
     """只读查询知识库。答案标注 wiki/ 来源页面路径；不写知识库本体，不触发快照。"""
     prompt = QUERY_PROMPT_TEMPLATE.format(question=question)
-    return kimi_runner.run_kimi(prompt)
+    return kimi_runner.run_kimi(prompt, timeout=QUERY_TIMEOUT_SECONDS)
 
 
 @mcp.tool()

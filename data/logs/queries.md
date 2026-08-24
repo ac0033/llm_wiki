@@ -1,3 +1,7 @@
 - 2026-08-23 查询：agent harness（执行壳）的核心定义 → 依据 wiki/concepts/agent-harness.md（主）、wiki/directions/ai-agent-harness.md（辅）回答。
 - 2026-08-23 查询（重复提问）：agent harness（执行壳）的核心定义 → 依据 wiki/concepts/agent-harness.md（主）、wiki/directions/ai-agent-harness.md（辅）回答，答案与上一条一致。
 - 2026-08-24 查询（第三次）：agent harness（执行壳）的核心定义 → 依据 wiki/concepts/agent-harness.md（主）、wiki/directions/ai-agent-harness.md（辅）回答，答案与前两次一致。
+- 2026-08-24 查询：如何构建可靠的 agentic workflow / 可靠性与 harness 架构（纵深防御）的关系 / 关键机制 → 依据 wiki/concepts/agent-harness.md、verification-governance.md、sandboxed-execution.md、control-loop.md、agent-observability.md、wiki/papers/agent-system-harness-design-survey.md 回答；知识库无「纵深防御」字面术语，按其多层防护的实质对应到 harness 各组件作答。
+- 2026-08-24 查询：multi-agent workflow 典型失败模式与避免不对齐/协调崩溃 → 主依据 wiki/concepts/multi-agent-orchestration.md，辅以 control-loop.md、agent-observability.md、state-artifact-store.md、context-manager.md。
+- 2026-08-24 查询：agent 可观测性与测试评估、全链路追踪、评测回归、可复现性 → 依据 wiki/concepts/agent-observability.md、agent-evaluation.md、wiki/comparisons/harness-vs-model-evaluation.md、wiki/concepts/sandboxed-execution.md 回答。
+- 2026-08-24 查询：agent 为何不可靠 / 可靠性的工程来源（harness、任务结构、评测设计）/ 预防-检测-恢复在 harness 中的落地 → 依据 agent-harness.md、control-loop.md、verification-governance.md、state-artifact-store.md、context-engineering.md、agent-evaluation.md、ai-agents-that-matter.md、agentbench-paper.md 等。

@@ -24,3 +24,11 @@ scripts/register_weekly_task.ps1
 Thumbs.db
 .idea/
 .vscode/
+
+# 兜底：密钥文件不入库
+.env
+.env.*
+!.env.example
+
+# 运行期会话状态（kimi CLI 会话 id）
+data/state/kb_session.json

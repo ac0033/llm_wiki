@@ -109,7 +109,11 @@ def lint_wiki(wiki_dir: Path, today: date | None = None) -> list[Issue]:
         # 7. stale
         last_verified = str(meta.get("last_verified", ""))
         if DATE_RE.match(last_verified):
-            age = (today - date.fromisoformat(last_verified)).days
+            try:
+                age = (today - date.fromisoformat(last_verified)).days
+            except ValueError:
+                issues.append(Issue("error", "schema", rel, "last_verified 不是有效日历日期"))
+                continue
             if age > common.STALE_DAYS:
                 issues.append(Issue("warning", "stale", rel, f"last_verified 已 {age} 天（>{common.STALE_DAYS} 天）"))
 

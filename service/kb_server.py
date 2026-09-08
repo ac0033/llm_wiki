@@ -20,7 +20,7 @@ from pathlib import Path
 from mcp.server.fastmcp import FastMCP
 
 from service import kimi_runner
-from service.snapshot import post_snapshot, pre_snapshot
+from service.snapshot import post_snapshot, dirty_paths
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
@@ -87,14 +87,16 @@ def kb_query(question: str) -> str:
 @mcp.tool()
 def kb_ingest(source: str) -> str:
     """单篇入库：arXiv ID / DOI / URL / 本地文件路径。入库前后自动做 git 快照。"""
-    pre_snapshot(REPO_ROOT, "ingest")
+    baseline_dirty = dirty_paths(REPO_ROOT)
 
     proc = _run_script("scripts/ingest_source.py", source)
     if proc.returncode != 0:
         return (
             f"ingest_source.py 执行失败（exit {proc.returncode}），已中止，未做 post-snapshot"
-            f"（操作前的 pre-snapshot 可用于回滚）。\n{_format_proc(proc)}"
+            f"（原有修改保留）。\n{_format_proc(proc)}"
         )
+    if "[skip] 来源已入库：" in proc.stdout:
+        return "来源已入库，保留已有笔记，不重复生成。\n" + _format_proc(proc)
 
     template = (REPO_ROOT / "prompts" / "ingest_source.md").read_text(encoding="utf-8")
     prompt = INGEST_PROMPT_TEMPLATE.format(source=source, template=template)
@@ -107,7 +109,8 @@ def kb_ingest(source: str) -> str:
             "未做 post-snapshot，当前工作区保留了脚本产出的草稿状态。"
         )
 
-    committed = post_snapshot(REPO_ROOT, "ingest", f"{source} 入库并完善正文")
+    changed = dirty_paths(REPO_ROOT) - baseline_dirty
+    committed = post_snapshot(REPO_ROOT, "ingest", f"{source} 入库并完善正文", paths=changed)
     snapshot_note = "已提交 post-snapshot。" if committed else "无新增变更，post-snapshot 跳过。"
     return f"入库完成，{snapshot_note}\n\n[脚本输出]\n{_format_proc(proc)}\n\n[kimi 回复]\n{answer}"
 
@@ -123,10 +126,12 @@ def kb_lint() -> str:
 @mcp.tool()
 def kb_reindex() -> str:
     """运行 scripts/compile_index.py 重建 wiki/index.md，随后 post-snapshot。"""
+    baseline_dirty = dirty_paths(REPO_ROOT)
     proc = _run_script("scripts/compile_index.py")
     if proc.returncode != 0:
         return f"compile_index.py 执行失败（exit {proc.returncode}）。\n{_format_proc(proc)}"
-    committed = post_snapshot(REPO_ROOT, "reindex", "重建 wiki/index.md")
+    committed = post_snapshot(REPO_ROOT, "reindex", "重建 wiki/index.md",
+                              paths=(dirty_paths(REPO_ROOT) - baseline_dirty) & {"wiki/index.md"})
     snapshot_note = "已提交 post-snapshot。" if committed else "索引无变化，post-snapshot 跳过。"
     return f"重建索引完成，{snapshot_note}\n{_format_proc(proc)}"
 

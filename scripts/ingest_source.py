@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import argparse
 import re
+import hashlib
 import sys
 from pathlib import Path
 
@@ -103,13 +104,20 @@ evidence_sources:
 
 
 def ingest(source: str, dry_run: bool = False) -> dict:
+    if dry_run:
+        return _ingest(source, dry_run=True)
+    with common.mutation_lock():
+        return _ingest(source)
+
+
+def _ingest(source: str, dry_run: bool = False) -> dict:
     kind = detect_kind(source)
     date_str = common.today()
     print(f"[detect] 类型={kind}")
 
     if kind == "arxiv":
         arxiv_id = ARXIV_ID_RE.match(source) or ARXIV_ID_RE.match(source.rsplit("/abs/", 1)[-1])
-        arxiv_id = arxiv_id.group(1)
+        arxiv_id = arxiv_id.group(0)  # v1/v2 分开保存，不能用新版覆盖旧快照
         abs_url = f"https://arxiv.org/abs/{arxiv_id}"
         pdf_url = f"https://arxiv.org/pdf/{arxiv_id}"
         raw_path = common.RAW_DIR / "papers" / f"arxiv-{arxiv_id}.pdf"
@@ -129,7 +137,7 @@ def ingest(source: str, dry_run: bool = False) -> dict:
         payload = ("html", doi_url)
 
     elif kind == "url":
-        slug = common.slugify(source.split("//", 1)[-1])[:60]
+        slug = common.slugify(source.split("//", 1)[-1])[:48] + "-" + hashlib.sha256(source.encode()).hexdigest()[:12]
         raw_path = common.RAW_DIR / "articles" / f"{slug}.md"
         title = source
         page_type = "paper"
@@ -160,20 +168,39 @@ def ingest(source: str, dry_run: bool = False) -> dict:
         print(f"[dry-run] 计划动作：raw → {raw_path}；草稿页 → {wiki_path}；登记 ingested.jsonl")
         return plan
 
+    registered = common.load_registry("ingested")
+    previous = next((r for r in registered if r.get("url") == source_url), None)
+    if previous:
+        # 已登记来源不重写用户已经完善的笔记；重试使用同一结果。
+        plan["status"] = "already_ingested"
+        print(f"[skip] 来源已入库：{previous.get('slug', slug)}")
+        return plan
+
     # 1. 落地 raw 素材
     raw_path.parent.mkdir(parents=True, exist_ok=True)
     if payload[0] == "pdf":
-        resp = _download(payload[1])
-        raw_path.write_bytes(resp.content)
-        preview = extract_pdf_text(resp.content)
+        content = raw_path.read_bytes() if raw_path.exists() else _download(payload[1]).content
+        if not raw_path.exists():
+            raw_path.write_bytes(content)
+        preview = extract_pdf_text(content)
     elif payload[0] == "html":
-        resp = _download(payload[1])
-        text = extract_html_text(resp.text, payload[1])
-        raw_path.write_text(text or resp.text, encoding="utf-8")
+        if raw_path.exists():
+            text = raw_path.read_text(encoding="utf-8")
+        else:
+            resp = _download(payload[1])
+            text = extract_html_text(resp.text, payload[1])
+            # 同时保留原始 HTML，抽取文本只是阅读副本。
+            html_path = raw_path.with_suffix(".html")
+            if not html_path.exists():
+                html_path.write_text(resp.text, encoding="utf-8")
+            raw_path.write_text(text or resp.text, encoding="utf-8")
         preview = text[:2000]
     else:
         src = Path(payload[1])
-        raw_path.write_bytes(src.read_bytes())
+        if raw_path.exists() and raw_path.read_bytes() != src.read_bytes():
+            raise ValueError("同名原始素材内容不同，请换名称入库，不能覆盖旧快照")
+        if not raw_path.exists():
+            raw_path.write_bytes(src.read_bytes())
         preview = extract_pdf_text(src.read_bytes()) if src.suffix.lower() == ".pdf" else ""
 
     # 2. 尝试从预览文本里提取标题（失败则保留占位标题）
@@ -184,7 +211,8 @@ def ingest(source: str, dry_run: bool = False) -> dict:
 
     # 3. 生成 wiki 草稿页
     wiki_path.parent.mkdir(parents=True, exist_ok=True)
-    wiki_path.write_text(make_draft_page(slug, title, page_type, source_url, date_str), encoding="utf-8")
+    if not wiki_path.exists():
+        wiki_path.write_text(make_draft_page(slug, title, page_type, source_url, date_str), encoding="utf-8")
 
     # 4. 登记 registry
     common.append_jsonl(common.registry_path("ingested"), {

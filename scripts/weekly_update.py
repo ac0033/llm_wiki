@@ -18,6 +18,8 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
+import json
 import sys
 from pathlib import Path
 
@@ -144,17 +146,27 @@ def main() -> int:
     queue_path = common.REVIEW_QUEUE_DIR / f"weekly-{args.date}.md"
     digest_path = common.WIKI_DIR / "digests" / f"weekly-{args.date}.md"
 
+    if queue_path.exists() or digest_path.exists():
+        batch_id = hashlib.sha256(json.dumps(new_items, sort_keys=True).encode()).hexdigest()[:10]
+        queue_path = queue_path.with_stem(queue_path.stem + "-" + batch_id)
+        digest_path = digest_path.with_stem(digest_path.stem + "-" + batch_id)
+
     if args.dry_run:
         print(f"[dry-run] 分流结果：{counts}")
         print(f"[dry-run] 将生成复核清单：{queue_path}")
         print(f"[dry-run] 将生成每周文摘：{digest_path}")
         return 0
 
-    common.write_jsonl(candidates_path, candidates)
     queue_path.parent.mkdir(parents=True, exist_ok=True)
     queue_path.write_text(render_review_queue(args.date, new_items), encoding="utf-8")
     digest_path.parent.mkdir(parents=True, exist_ok=True)
-    digest_path.write_text(render_digest(args.date, new_items), encoding="utf-8")
+    digest = render_digest(args.date, new_items)
+    if digest_path.stem != f"weekly-{args.date}":
+        digest = digest.replace(f"每周候选文摘 {args.date}", f"每周候选文摘 {args.date} 批次 {digest_path.stem.rsplit('-', 1)[-1]}")
+        digest = digest.replace(f"aliases: [weekly-{args.date}]", f"aliases: [{digest_path.stem}]")
+    digest_path.write_text(digest, encoding="utf-8")
+    # 产物成功落盘再消费候选；中途失败时下次仍可重试。
+    common.write_jsonl(candidates_path, candidates)
     append_log(args.date, counts, queue_path, digest_path)
 
     print(f"分流结果：{counts}")
@@ -164,4 +176,7 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    if "--dry-run" in sys.argv:
+        raise SystemExit(main())
+    with common.mutation_lock():
+        raise SystemExit(main())

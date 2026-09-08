@@ -3,6 +3,8 @@
 __pycache__/
 *.py[cod]
 .pytest_cache/
+.maintenance.lock
+data/**/*.tmp
 .ruff_cache/
 *.egg-info/
 

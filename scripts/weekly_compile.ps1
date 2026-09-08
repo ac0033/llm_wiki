@@ -31,7 +31,7 @@ Set-Location $Root
 
 $DateStr = Get-Date -Format "yyyy-MM-dd"
 $LogDir = Join-Path $Root "data/logs/weekly"
-New-Item -ItemType Directory -Force -Path $LogDir | Out-Null
+if (-not $DryRun) { New-Item -ItemType Directory -Force -Path $LogDir | Out-Null }
 
 Write-Host "[1/5] fetch_candidates.py (arXiv / OpenAlex / Semantic Scholar)"
 $FetchArgs = @("--limit", "$Limit")
@@ -57,11 +57,10 @@ if ($DryRun) {
         $null = Invoke-WebRequest -Uri "http://127.0.0.1:8765/bootstrap" -UseBasicParsing -TimeoutSec 5
         Write-Host "[dry-run] agent-memory MCP server reachable"
     } catch {
-        Write-Error "[dry-run] agent-memory MCP server is NOT reachable at http://127.0.0.1:8765"
-        exit 1
+        Write-Warning "[dry-run] memory service unavailable; knowledge processing can continue without memory"
     }
     Write-Host "[dry-run] LLM compile step skipped. lint exit code: $PreLintExit"
-    exit 0
+    exit $PreLintExit
 }
 
 if ($PreLintExit -ne 0) {
@@ -76,8 +75,7 @@ Write-Host "[4/5] kimi editorial pass with prompts/weekly_compile.md"
 try {
     $null = Invoke-WebRequest -Uri "http://127.0.0.1:8765/bootstrap" -UseBasicParsing -TimeoutSec 5
 } catch {
-    Write-Error "agent-memory MCP server is not reachable at http://127.0.0.1:8765. Start the memory service first, then re-run this script."
-    exit 1
+    Write-Warning "Memory service unavailable; continue knowledge processing without memory. Do not bypass pending review gates."
 }
 
 $LogFile = Join-Path $LogDir "weekly-$DateStr.jsonl"

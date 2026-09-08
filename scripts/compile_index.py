@@ -107,4 +107,7 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    if "--dry-run" in sys.argv:
+        raise SystemExit(main())
+    with common.mutation_lock():
+        raise SystemExit(main())

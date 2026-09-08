@@ -39,13 +39,29 @@ def _git(repo: Path, *args: str, check: bool = True) -> subprocess.CompletedProc
     return result
 
 
-def snapshot(repo: Path, message: str) -> bool:
+def dirty_paths(repo: Path) -> set[str]:
+    paths = set()
+    for args in (("diff", "--name-only", "-z"), ("diff", "--cached", "--name-only", "-z"),
+                 ("ls-files", "--others", "--exclude-standard", "-z")):
+        paths.update(p for p in _git(repo, *args).stdout.split("\0") if p)
+    return paths
+
+
+def snapshot(repo: Path, message: str, paths=None) -> bool:
     """暂存全部变更并按指定 message 提交；没有待提交变更时返回 False 不报错。"""
     repo = Path(repo)
-    _git(repo, "add", "-A")
-    # diff --cached --quiet：有暂存变更时 exit 1，干净时 exit 0
-    if _git(repo, "diff", "--cached", "--quiet", check=False).returncode == 0:
+    selected = sorted(dirty_paths(repo) if paths is None else paths)
+    if not selected:
         return False
+    for path in selected:
+        (repo / path).resolve().relative_to(repo.resolve())
+    _git(repo, "add", "--", *selected)
+    # diff --cached --quiet：有暂存变更时 exit 1，干净时 exit 0
+    status = _git(repo, "diff", "--cached", "--quiet", "--", *selected, check=False).returncode
+    if status == 0:
+        return False
+    if status != 1:
+        raise RuntimeError("无法检查快照差异")
     _git(
         repo,
         "-c",
@@ -53,8 +69,10 @@ def snapshot(repo: Path, message: str) -> bool:
         "-c",
         f"user.email={SNAPSHOT_AUTHOR_EMAIL}",
         "commit",
+        "--only",
         "-m",
         message,
+        "--", *selected,
     )
     return True
 
@@ -65,6 +83,6 @@ def pre_snapshot(repo: Path, op: str) -> bool:
     return snapshot(Path(repo), f"snapshot: pre-{op} {timestamp}")
 
 
-def post_snapshot(repo: Path, op: str, summary: str) -> bool:
+def post_snapshot(repo: Path, op: str, summary: str, paths=None) -> bool:
     """变更性操作成功后的快照，message 形如 ``<op>: <摘要>``。"""
-    return snapshot(Path(repo), f"{op}: {summary}")
+    return snapshot(Path(repo), f"{op}: {summary}", paths=paths)

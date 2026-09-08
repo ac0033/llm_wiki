@@ -7,6 +7,8 @@ from __future__ import annotations
 import json
 import re
 import unicodedata
+import os
+from contextlib import contextmanager
 from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable
@@ -145,9 +147,38 @@ def append_jsonl(path: Path, record: dict[str, Any]) -> None:
 
 def write_jsonl(path: Path, records: Iterable[dict[str, Any]]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", encoding="utf-8") as f:
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    with tmp.open("w", encoding="utf-8") as f:
         for r in records:
             f.write(json.dumps(r, ensure_ascii=False) + "\n")
+    tmp.replace(path)
+
+
+@contextmanager
+def mutation_lock():
+    """确定性维护脚本串行写库；进程崩溃由操作系统释放锁。"""
+    path = ROOT / ".maintenance.lock"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a+b") as handle:
+        handle.seek(0, 2)
+        if not handle.tell():
+            handle.write(b"0")
+            handle.flush()
+        handle.seek(0)
+        if os.name == "nt":
+            import msvcrt
+            msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
+        else:
+            import fcntl
+            fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        try:
+            yield
+        finally:
+            handle.seek(0)
+            if os.name == "nt":
+                msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
+            else:
+                fcntl.flock(handle, fcntl.LOCK_UN)
 
 
 def load_registry(name: str) -> list[dict[str, Any]]:
@@ -174,9 +205,11 @@ def set_watermark(source: str, when: str, path: Path | None = None) -> None:
     state = load_sync_state(path)
     state.setdefault("sources", {})[source] = {"last_fetched": when}
     path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", encoding="utf-8") as f:
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    with tmp.open("w", encoding="utf-8") as f:
         json.dump(state, f, ensure_ascii=False, indent=2)
         f.write("\n")
+    tmp.replace(path)
 
 
 # ---------- slug 与去重 ----------

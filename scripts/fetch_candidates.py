@@ -14,7 +14,8 @@ from __future__ import annotations
 import argparse
 import os
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
+import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -39,18 +40,29 @@ def _http_get(url: str, params: dict, headers: dict | None = None) -> httpx.Resp
 def fetch_arxiv(cfg: dict, since: str | None, limit: int) -> list[dict]:
     """arXiv Atom API，按 submittedDate 降序取最新条目。"""
     query = cfg.get("query", "")
+    categories = cfg.get("categories", [])
+    if categories:
+        query = f"({query}) AND (" + " OR ".join(f"cat:{c}" for c in categories) + ")"
+    if since:
+        query = f"({query}) AND submittedDate:[{since.replace('-', '')}0000 TO 999912312359]"
     per_request = min(limit, cfg.get("max_results_per_request", 100))
     resp = _http_get(
         cfg["base_url"],
         {
             "search_query": query,
-            "start": 0,
+            "start": cfg.get("_offset", 0),
             "max_results": per_request,
             "sortBy": "submittedDate",
             "sortOrder": "descending",
         },
     )
     feed = feedparser.parse(resp.text)
+    if feed.get("bozo") or any("/api/errors" in e.get("id", "") for e in feed.entries):
+        raise ValueError("arXiv 返回错误或无法解析的响应")
+    cfg["_more"] = len(feed.entries) == per_request
+    cfg["_offset"] = cfg.get("_offset", 0) + len(feed.entries)
+    if since and any((e.get("published") or "")[:10] < since for e in feed.entries):
+        cfg["_more"] = False
     out = []
     for entry in feed.entries:
         published = (entry.get("published") or "")[:10]
@@ -74,6 +86,7 @@ def fetch_openalex(cfg: dict, since: str | None, limit: int) -> list[dict]:
     params = {
         "search": cfg.get("query", ""),
         "per-page": min(limit, cfg.get("per_page", 50)),
+        "cursor": cfg.get("_cursor", "*"),
         "sort": "publication_date:desc",
     }
     if since:
@@ -81,6 +94,11 @@ def fetch_openalex(cfg: dict, since: str | None, limit: int) -> list[dict]:
     if cfg.get("mailto"):
         params["mailto"] = cfg["mailto"]
     data = _http_get(cfg["base_url"], params).json()
+    if "results" not in data or "meta" not in data:
+        raise ValueError("OpenAlex 响应缺少结果或分页元数据")
+    next_cursor = data["meta"].get("next_cursor")
+    cfg["_more"] = bool(data["results"] and next_cursor and next_cursor != cfg.get("_cursor"))
+    cfg["_cursor"] = next_cursor
     out = []
     for work in data.get("results", []):
         doi = work.get("doi") or ""
@@ -124,10 +142,15 @@ def fetch_semantic_scholar(cfg: dict, since: str | None, limit: int) -> list[dic
         {
             "query": cfg.get("query", ""),
             "limit": min(limit, cfg.get("per_page", 50)),
+            "offset": cfg.get("_offset", 0),
             "fields": cfg.get("fields", "title,abstract,authors,url,externalIds,publicationDate"),
         },
         headers=headers or None,
     ).json()
+    if "data" not in data:
+        raise ValueError("Semantic Scholar 响应缺少 data")
+    cfg["_more"] = data.get("next") is not None
+    cfg["_offset"] = data.get("next", 0)
     out = []
     for paper in data.get("data", []):
         published = paper.get("publicationDate") or ""
@@ -155,11 +178,31 @@ FETCHERS = {
 }
 
 
+def fetch_pages(name: str, cfg: dict, since: str | None, page_size: int) -> tuple[list[dict], bool]:
+    """达到页数上限时明确返回未完成，不能推进水位；提高上限可继续覆盖窗口。"""
+    if page_size <= 0:
+        raise ValueError("limit 必须大于 0")
+    paging = dict(cfg)
+    records, seen = [], set()
+    for page in range(cfg.get("max_pages", 20)):
+        if page and name == "arxiv":
+            time.sleep(cfg.get("request_interval_seconds", 3))
+        batch = FETCHERS[name](paging, since, page_size)
+        for r in batch:
+            key = (r.get("source"), r.get("source_id"))
+            if key not in seen:
+                records.append(r)
+                seen.add(key)
+        if not paging.get("_more"):
+            return records, True
+    return records, False
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="抓取候选文献")
     parser.add_argument("--source", choices=[*FETCHERS.keys(), "all"], default="all")
     parser.add_argument("--since", help="只取该日期（YYYY-MM-DD）之后的条目，覆盖 watermark")
-    parser.add_argument("--limit", type=int, default=50, help="每个来源最多抓取条数")
+    parser.add_argument("--limit", type=int, default=50, help="每页条数；自动翻页到完成或配置的 max_pages 上限")
     parser.add_argument("--dry-run", action="store_true", help="只打印结果，不写 registry、不推进 watermark")
     args = parser.parse_args()
 
@@ -169,19 +212,29 @@ def main() -> int:
 
     names = list(FETCHERS) if args.source == "all" else [args.source]
     total_new = 0
+    incomplete = False
+    known = {(r.get("source"), r.get("source_id")) for r in common.load_registry("candidates")}
     for name in names:
         cfg = sources_cfg.get(name, {})
         if not cfg.get("enabled", False):
             print(f"[skip] {name} 未启用")
             continue
-        since = args.since or common.get_watermark(name)
+        since = args.since or common.get_watermark(name, common.load_sync_state(watermark_path))
+        if since and not args.since:
+            since = (datetime.fromisoformat(since) - timedelta(days=cfg.get("lookback_days", 7))).date().isoformat()
+        started_at = datetime.now(timezone.utc).date().isoformat()
         print(f"[fetch] {name} since={since or '(首次全量)'} limit={args.limit}")
         try:
-            records = FETCHERS[name](cfg, since, args.limit)
+            records, complete = fetch_pages(name, cfg, since, args.limit)
         except Exception as exc:  # 网络/解析失败不阻断其他来源
             print(f"[error] {name} 抓取失败：{exc}", file=sys.stderr)
+            incomplete = True
             continue
 
+        if not complete:
+            incomplete = True
+            print(f"[incomplete] {name} 达到页数上限，已保留结果但不推进水位", file=sys.stderr)
+        records = [r for r in records if (r.get("source"), r.get("source_id")) not in known]
         for r in records:
             r["fetched_at"] = common.now_iso()
             r["status"] = "new"
@@ -192,13 +245,17 @@ def main() -> int:
         else:
             for r in records:
                 common.append_jsonl(common.registry_path("candidates"), r)
-            common.set_watermark(name, datetime.now(timezone.utc).date().isoformat(), watermark_path)
+            if complete:
+                common.set_watermark(name, started_at, watermark_path)
         print(f"[done] {name}: {len(records)} 条")
         total_new += len(records)
 
     print(f"合计新增候选 {total_new} 条{'（dry-run，未写盘）' if args.dry_run else ''}")
-    return 0
+    return 1 if incomplete else 0
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    if "--dry-run" in sys.argv:
+        raise SystemExit(main())
+    with common.mutation_lock():
+        raise SystemExit(main())

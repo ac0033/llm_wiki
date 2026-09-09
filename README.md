@@ -8,6 +8,16 @@
 - `wiki/` — 知识层。Obsidian 可直接打开的 Markdown 页面，按类型分目录：`concepts/`、`papers/`、`systems/`、`benchmarks/`、`comparisons/`、`directions/`、`digests/`、`questions/`。页面之间用 wikilink 互联，例如 `[[agent-harness]]`。
 - `config/` + `data/` — 元数据层（schema 层）。`config/` 存来源、评分细则、研究方向等配置；`data/registry/` 存候选与已入库文献的机器可读登记簿（JSONL）；`data/state/` 存抓取水位线（watermark）；`data/review_queue/` 存等待人工复核的条目。
 
+## 安装
+
+需要 Python 3.11+ 和 uv。
+
+```bash
+git clone https://github.com/ac0033/llm_wiki.git
+cd llm_wiki
+uv sync
+```
+
 ## 常用命令
 
 ```bash
@@ -43,7 +53,7 @@ Windows 下每周自动流程见 `scripts/weekly_compile.ps1`（支持 `-DryRun`
 
 ### 写作驱动的积累
 
-日常优先从 `../writing` 输入想法：检索本库已有来源，读取最新原文，形成稿件；确认文章并保存后，自动把来源片段、草稿页和阅读清单送回本库。片段不是全文，入库状态为低置信度草稿，不代表已验证。已有笔记与复核决定保留。
+可以配合 [writing-agent](https://github.com/ac0033/writing-agent) 使用（按其安装说明克隆为相邻的 `writing` 目录）：检索本库已有来源，读取最新原文，形成稿件；确认文章并保存后，自动把来源片段、草稿页和阅读清单送回本库。片段不是全文，入库状态为低置信度草稿，不代表已验证。已有笔记与复核决定保留。
 
 回库失败时，本地稿件和 `evidence.json` 仍保留，可重试：
 
@@ -71,9 +81,26 @@ uv run python scripts/ingest_source.py https://example.com/blog-post
 
 每周自动流程跑完后，拿不准的候选会进入复核清单，等你确认：
 
-- 清单位置：`data/review_queue/weekly-<日期>.md`；同期周报末尾的「待复核交接」小节（`wiki/digests/weekly-<日期>.md`）也会汇总同样的内容，在 Obsidian 里看周报即可。
+- 清单位置：`data/review_queue/weekly-<日期>*.md`；同期周报末尾的「待复核交接」小节（`wiki/digests/weekly-<日期>.md`）也会汇总同样的内容，在 Obsidian 里看周报即可。
 - 清单里每条候选前的复选框：`[x]` 表示 weekly_compile 阶段的 Kimi 已给出推荐/暂缓结论并附了理由，**仍在等你确认**，不是最终决定。
 - 确认方式：在 Kimi Code 会话里说「带我过一遍本周待复核清单」。Kimi 会逐条讲解推荐理由，你口头给出决定（入库 / 放弃 / 先放着），由它把结论写回清单并执行入库——不需要你手动编辑清单文件。
+
+## MCP 接入
+
+```bash
+uv run python -m service.kb_server
+```
+
+在仓库根目录启动，宿主通过 stdio 连接。当前工具入口见 [service/kb_server.py](service/kb_server.py)：
+
+| 工具 | 用途 |
+|---|---|
+| `kb_query` | 查询知识库 |
+| `kb_ingest` | 入库来源 |
+| `kb_lint` | 校验页面与链接 |
+| `kb_reindex` | 重建索引 |
+
+MCP 接入不会自动注册 Windows 计划任务。周更脚本生成的注册文件需另行审阅和执行。同日多批次的复核清单和摘要会保留独立文件，实际文件名以脚本输出为准。
 
 ## 约定
 

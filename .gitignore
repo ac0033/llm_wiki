@@ -37,3 +37,9 @@ data/state/kb_session.json
 
 # 一次性验收记录与验证脚本，只在本机保留
 data/logs/acceptance-*/
+
+# 开发者私人材料与编码助手/编辑器的本地配置（只忽略根目录）
+/.notes/
+/.claude/
+/.kimi-code/mcp.json
+.obsidian/workspace.json

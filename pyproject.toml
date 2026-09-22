@@ -1,6 +1,6 @@
 [project]
 name = "llm-wiki"
-version = "0.1.0"
+version = "0.2.0"
 description = "AI Agent（重点：Agent Harness）文献知识库的抓取、入库与维护基础设施"
 readme = "README.md"
 requires-python = ">=3.11"

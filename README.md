@@ -2,6 +2,8 @@
 
 这是一个从零搭建的 Markdown / Obsidian 文献知识库，主题是 AI Agent，重点关注 **Agent Harness**（智能体的运行时脚手架：驱动模型循环、管理上下文、调度工具的那一层代码与系统设计）。
 
+状态：已公开。变更记录见 [CHANGELOG](docs/CHANGELOG.md)。
+
 ## 目录分层
 
 模型调用入口：`service/agent_runner.py` 用 Claude Code / Opus 5 处理查询、原文理解、候选筛选和跨文献综合，Codex 做独立核验；`chat.ps1` 启动 Claude Code 交互会话。`KB_<角色>_PROVIDER` / `KB_<角色>_MODEL` 可显式配置。入口显式加载 `config/agent-memory.mcp.json` 和 agent-memory skill 镜像，scope 为 `repo:llm-wiki`。抓取、登记、索引与 lint 仍由脚本负责，人工复核边界不变。

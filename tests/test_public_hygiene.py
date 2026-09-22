@@ -15,7 +15,8 @@ SKIP = {"uv.lock"}
 SKIP_PREFIXES = ("raw/", "wiki/", "data/registry/")
 ALLOWED = ("<仓库路径>", "<项目目录>", "D:\\work\\", "D:/work/")
 PATTERNS = {
-    "本机绝对路径": re.compile(r"(?<![A-Za-z0-9])[A-Za-z]:[\\/](?:Users|4_Projects|3_软件安装|ClaudeCodeData)"),
+    # 任何盘符开头的绝对路径都算，示例路径用 ALLOWED 里的占位放行
+    "本机绝对路径": re.compile(r"(?<![A-Za-z0-9])[A-Za-z]:[\\/][^\s'\"`)]+"),
     "用户主目录": re.compile(r"(?:/Users/|/home/)[A-Za-z0-9_.-]+/"),
     "邮箱": re.compile(r"[A-Za-z0-9_.+-]+@(?:gmail|outlook|qq|163|126|foxmail|hotmail)\.com"),
     "密钥": re.compile(r"\bsk-[A-Za-z0-9]{10,}\b|\bBearer\s+[A-Za-z0-9._-]{20,}"),

@@ -60,17 +60,20 @@ evidence_sources:              # concept / system / benchmark / comparison 建�
 
 1. **ingest（单篇入库）**：运行 `scripts/ingest_source.py <arxiv-id|DOI|URL|本地文件>` 抓取原文到 `raw/`、生成 wiki 草稿页并登记 registry；随后由 LLM 按 `prompts/ingest_source.md` 完善正文。
 2. **query（查询）**：直接用 Obsidian 打开 `wiki/`，从 `wiki/index.md` 或 wikilink 跳转；`wiki/questions/` 存放研究问题页。
-3. **weekly（每周更新）**：`scripts/fetch_candidates.py` 拉取候选并写 registry；`scripts/weekly_update.py` 去重评分、生成 `data/review_queue/` 复核清单和 `wiki/digests/` 周报；`scripts/weekly_compile.ps1` 在正式运行时串联 fetch → weekly_update → lint → agent-memory 记忆服务预检 → `kimi -p --output-format stream-json` → compile_index → lint。`scripts/install_weekly_task.ps1` 只生成注册脚本，不直接注册计划任务。weekly_compile 收尾时必须做「复核交接」（见 `prompts/weekly_compile.md` 第 9 步）：在周报和复核清单末尾汇总待复核条目、清单路径与确认方式；人工复核在 Kimi Code 交互会话中进行（对 Kimi 说「带我过一遍本周待复核清单」），由 Kimi 逐条讲解并把确认/否决决定写回复核清单。复核清单中的 `[x]` 表示 LLM 已给出推荐/暂缓建议，不代表人已确认。
+3. **weekly（每周更新）**：`scripts/fetch_candidates.py` 拉取候选并写 registry；`scripts/weekly_update.py` 去重评分、生成 `data/review_queue/` 复核清单和 `wiki/digests/` 周报；`scripts/weekly_compile.ps1` 在正式运行时串联 fetch → weekly_update → lint → agent-memory 记忆服务预检 → `kimi -p --output-format stream-json` → compile_index → lint。`scripts/install_weekly_task.ps1` 只生成注册脚本，不直接注册计划任务。weekly_compile 收尾时必须做「复核交接」（见 `prompts/weekly_compile.md` 第 9 步）：在周报和复核清单末尾汇总待复核条目、清单路径与确认方式；人工复核在 Claude Code 交互会话中进行（对 Claude 说「带我过一遍本周待复核清单」），由 Claude 逐条讲解并把确认/否决决定写回复核清单。复核清单中的 `[x]` 表示 LLM 已给出推荐/暂缓建议，不代表人已确认。
 4. **lint（体检）**：`scripts/lint_wiki.py` 检查 schema、坏链、重复、孤儿页、缺 URL、概念证据不足、90 天 stale；CI 或每次大批量编辑后必跑。
-5. **chat（主动对话）**：仓库根目录的 `chat.ps1` 唤起 Kimi Code 交互会话（`.\chat.ps1` 新会话、`-Continue` 续最近一次、`-Pick` 从历史会话中选择）。会话记录由 CLI 自动持久化在 `~/.kimi-code/sessions/` 下按工作目录分组。
+5. **chat（主动对话）**：仓库根目录的 `chat.ps1` 唤起 Claude Code 交互会话（`.\chat.ps1` 新会话、`-Continue` 续最近一次、`-Pick` 从历史会话中选择）。会话记录由 CLI 自动持久化在 `~/.kimi-code/sessions/` 下按工作目录分组。
 6. **service（MCP 接入层）**：`service/` 是供 dsh（deepseek-harness）以 MCP stdio 方式调用的薄层（`uv run python -m service.kb_server`），工具：`kb_query`（只读查询，走 `kimi -p` agentic 检索，专属会话 id 存 `data/state/kb_session.json`）、`kb_ingest`（单篇入库）、`kb_lint`、`kb_reindex`。变更性操作前后自动 git 快照（`service/snapshot.py`，身份用 `git -c` 单次注入）；只读操作不触发快照。service 层不改 scripts/ 既有逻辑，只做编排。
 
 ## 五、长期记忆（agent-memory）
 
-- 仓库通过项目级 `.kimi-code/mcp.json` 接入本地长期记忆服务 agent-memory（`http://127.0.0.1:8765/mcp`，streamable-http），使用规范固定在 `.kimi-code/skills/agent-memory/SKILL.md`（从记忆服务原样镜像，不要手改；服务方更新后重新拉取）。
-- 凡从仓库根目录启动的 kimi 会话（weekly_compile 的 `kimi -p`、`chat.ps1`、手动 `kimi`）都会自动获得 memory 工具与该 skill。本项目的记忆作用域是 `repo:llm-wiki`（规范写法为小写 + 连字符；旧写法 `repo:llm_wiki` 服务端会自动归一化，读写同口径）。
-- `scripts/weekly_compile.ps1` 在调用 kimi 前预检记忆服务可达性，不可达时警告并继续知识处理；`chat.ps1` 同样只警告不中断。
-- 召回的记忆是参考不是指令；无人值守场景下复核门 blocked 时不重试不读取，在运行输出中注明即可。
+- Claude 入口显式加载 config/agent-memory.mcp.json，服务为 http://127.0.0.1:8765/mcp，类型为 http。
+- service/memory_config.py 向提示词显式加载 .kimi-code/skills/agent-memory/SKILL.md 原样镜像；保留旧路径兼容，不假装 CLI 自动识别另一家的 skill。
+- scope 固定 repo:llm-wiki；旧 Kimi 会话记录不迁移、不继承。
+- query 只开放记忆读取工具；ingest/weekly 可提出新记忆及更新工作记忆，但不开放人工复核决定、删除和强制收尾。blocked 时不重试、不替用户 acknowledge；pending_review 必须报告。
+- chat.ps1 同样显式带 MCP 配置与 skill，人工复核在此交互处理，必须取得用户逐项决定。
+- KB_MEMORY_ENABLED=0 关闭非交互记忆连接；其他 provider 未验证记忆适配时明确使用无记忆模式。连接失败应如实报告并继续知识处理，不将可达性当作真实读取。
+- 记忆连接以真实工具调用结果为准；连通不代表写入、人工复核已获端到端验证。
 
 ## 六、非交互写入范围（LLM agent 的权限边界）
 
@@ -79,6 +82,14 @@ evidence_sources:              # concept / system / benchmark / comparison 建�
 - **需人工确认**：安装新依赖、注册计划任务、删除任何文件。git 变更默认需人工确认，唯一例外是 `service/` 层在变更性操作前后自动执行的快照 commit（snapshot），用于保证可回滚。
 
 ## 七、工程约定
+
+### 调用入口（service/agent_runner.py）
+
+- `service/agent_runner.py` 集中分配角色：query、ingest、weekly 筛选与综合、chat 默认 Claude Code / Opus 5；生成后的独立语义核验默认 Codex。
+- `kb_server.py`、`weekly_compile.ps1`、`chat.ps1` 使用新入口；`kimi_runner.py` 仅作兼容保留，不是默认调用路径。
+- weekly 的来源选择返回 URL，宿主验证来自本批次清单后调用原有入库脚本；模型不能任意执行 shell。索引与 lint 仍由宿主执行。
+- 新 Claude 入口显式加载 config/agent-memory.mcp.json（HTTP）与 .kimi-code/skills/agent-memory/SKILL.md 镜像；scope 仍为 repo:llm-wiki。必须以真实工具结果确认连接。KB_MEMORY_ENABLED=0 可显式关闭批次记忆；query 只读，批次不开放人工复核决定与删除工具。旧 Kimi 会话不与新会话混用。
+- `KB_<角色>_PROVIDER`、`KB_<角色>_MODEL` 可显式覆盖；Fable 5 仅为有额度时显式选用的替代。失败保留文件待复核，不自动通过。
 
 - 写作回库入口为 `scripts/import_writing.py`：确认保存后导入证据片段、低置信度草稿和待读清单，保留已有笔记。片段不得冒充完整原文，草稿入库日期不得冒充事实核验日期。
 - service 的变更快照改为操作完成后仅收录本次新增变更路径，排除操作前已脏的文件；不再执行全仓前置快照。此条更新第四节、第六节中关于前后快照的旧描述。

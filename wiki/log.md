@@ -27,3 +27,7 @@
 - 更新交叉链接：[[ai-agent-harness]]、[[agent-memory]]、[[context-engineering]]。
 - 流程改动（按用户指示）：`prompts/weekly_compile.md` 增加第 9 步「复核交接」；`README.md` 增加「操作流程」（单篇入库、每周复核）；`AGENTS.md` 工作流 3 补充复核确认约定。
 - 清理错配：误入库的 arXiv:2404.02737（hep-th 物理论文）的草稿页与 raw PDF 已删除；registry 中对应记录（`data/registry/ingested.jsonl` 中 source_id 为 2404.02737 的行）需人工删除。
+
+## [2026-08-28] weekly_update | candidates={'review': 4, 'dropped': 16} | queue=weekly-2026-08-28.md | digest=weekly-2026-08-28.md
+
+## [2026-09-04] weekly_update | candidates={'dropped': 17, 'review': 2, 'duplicate_in_batch': 1} | queue=weekly-2026-09-04.md | digest=weekly-2026-09-04.md

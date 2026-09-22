@@ -54,7 +54,7 @@ def render_review_queue(date_str: str, items: list[dict]) -> str:
     lines = [
         f"# 复核清单 {date_str}",
         "",
-        "以下候选由 fetch_candidates.py + weekly_update.py 自动生成。weekly_compile 阶段的 Kimi Code CLI 可以补推荐理由，但不能改动评分和分流结果。",
+        "以下候选由 fetch_candidates.py + weekly_update.py 自动生成。weekly_compile 阶段的 Claude Code CLI 可以补推荐理由，但不能改动评分和分流结果。",
         "",
     ]
     auto = [c for c in items if c.get("status") == "auto_include"]

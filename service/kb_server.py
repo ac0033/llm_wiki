@@ -19,7 +19,7 @@ from pathlib import Path
 
 from mcp.server.fastmcp import FastMCP
 
-from service import kimi_runner
+from service import agent_runner
 from service.snapshot import post_snapshot, dirty_paths
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -45,7 +45,7 @@ INGEST_PROMPT_TEMPLATE = """这是一个针对 llm_wiki 知识库的【单篇入
 
 确定性脚本 scripts/ingest_source.py 已经完成抓取：原文已落到 raw/，wiki 草稿页已生成，registry 已登记。来源标识为：{source}
 
-请严格按照 prompts/ingest_source.md 模板的全部要求（模板全文附在最后），阅读 raw/ 中本次入库的原文，把刚生成的草稿页补全为正式知识页，并按模板第 5 步运行 lint 与 compile_index 收尾。
+请严格按照 prompts/ingest_source.md 模板的全部要求（模板全文附在最后），阅读 raw/ 中本次入库的原文，把刚生成的草稿页补全为知识页。独立核验、lint 与 compile_index 由宿主收尾，不要执行 shell 或修改索引。
 
 ---- prompts/ingest_source.md 全文 ----
 {template}
@@ -81,7 +81,7 @@ def _format_proc(proc: subprocess.CompletedProcess[str]) -> str:
 def kb_query(question: str) -> str:
     """只读查询知识库。答案标注 wiki/ 来源页面路径；不写知识库本体，不触发快照。"""
     prompt = QUERY_PROMPT_TEMPLATE.format(question=question)
-    return kimi_runner.run_kimi(prompt, timeout=QUERY_TIMEOUT_SECONDS)
+    return agent_runner.run_agent("query", prompt, timeout=QUERY_TIMEOUT_SECONDS)
 
 
 @mcp.tool()
@@ -102,17 +102,24 @@ def kb_ingest(source: str) -> str:
     prompt = INGEST_PROMPT_TEMPLATE.format(source=source, template=template)
     try:
         # 写正文是完整 agent 循环（读原文、改页、跑 lint/compile_index），实测超过 5 分钟
-        answer = kimi_runner.run_kimi(prompt, timeout=900)
-    except kimi_runner.KimiError as exc:
+        before = agent_runner.content_snapshot()
+        answer = agent_runner.run_agent("ingest", prompt, timeout=900)
+        changed = [p for p, digest in agent_runner.content_snapshot().items() if before.get(p) != digest]
+        answer += "\n" + agent_runner.audit(prompt, changed)
+        for script in ("scripts/compile_index.py", "scripts/lint_wiki.py"):
+            check = _run_script(script)
+            if check.returncode:
+                raise agent_runner.AgentError(f"{script} 检查失败；保留文件供复核")
+    except agent_runner.AgentError as exc:
         return (
-            f"脚本入库已完成，但 kimi 完善正文失败：{exc}\n"
+            f"脚本入库已完成，但正文生成或核验失败：{exc}\n"
             "未做 post-snapshot，当前工作区保留了脚本产出的草稿状态。"
         )
 
     changed = dirty_paths(REPO_ROOT) - baseline_dirty
     committed = post_snapshot(REPO_ROOT, "ingest", f"{source} 入库并完善正文", paths=changed)
     snapshot_note = "已提交 post-snapshot。" if committed else "无新增变更，post-snapshot 跳过。"
-    return f"入库完成，{snapshot_note}\n\n[脚本输出]\n{_format_proc(proc)}\n\n[kimi 回复]\n{answer}"
+    return f"入库完成，{snapshot_note}\n\n[脚本输出]\n{_format_proc(proc)}\n\n[模型回复]\n{answer}"
 
 
 @mcp.tool()

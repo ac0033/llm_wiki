@@ -18,6 +18,7 @@ import argparse
 import re
 import hashlib
 import sys
+from html.parser import HTMLParser
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -72,6 +73,32 @@ def extract_html_text(html: str, url: str) -> str:
     import trafilatura
 
     return trafilatura.extract(html, url=url) or ""
+
+
+def extract_html_title(html: str) -> str:
+    """网页正文可能先抽到订阅横幅；标题只取明确的标题元数据。"""
+    class Titles(HTMLParser):
+        def __init__(self):
+            super().__init__()
+            self.og = ""
+            self.active = ""
+            self.values = {"h1": [], "title": []}
+        def handle_starttag(self, tag, attrs):
+            attrs = dict(attrs)
+            if tag == "meta" and (attrs.get("property") or attrs.get("name")) == "og:title":
+                self.og = attrs.get("content", "")
+            if tag in self.values:
+                self.active = tag
+        def handle_endtag(self, tag):
+            if tag == self.active:
+                self.active = ""
+        def handle_data(self, data):
+            if self.active:
+                self.values[self.active].append(data)
+    parser = Titles()
+    parser.feed(html)
+    return " ".join((parser.og or "".join(parser.values["h1"])
+                     or "".join(parser.values["title"])).split())[:200]
 
 
 def make_draft_page(slug: str, title: str, page_type: str, source_url: str, date_str: str) -> str:
@@ -184,6 +211,7 @@ def _ingest(source: str, dry_run: bool = False) -> dict:
             raw_path.write_bytes(content)
         preview = extract_pdf_text(content)
     elif payload[0] == "html":
+        html_path = raw_path.with_suffix(".html")
         if raw_path.exists():
             text = raw_path.read_text(encoding="utf-8")
         else:
@@ -195,6 +223,8 @@ def _ingest(source: str, dry_run: bool = False) -> dict:
                 html_path.write_text(resp.text, encoding="utf-8")
             raw_path.write_text(text or resp.text, encoding="utf-8")
         preview = text[:2000]
+        if html_path.exists():
+            title = extract_html_title(html_path.read_text(encoding="utf-8")) or title
     else:
         src = Path(payload[1])
         if raw_path.exists() and raw_path.read_bytes() != src.read_bytes():
@@ -204,7 +234,7 @@ def _ingest(source: str, dry_run: bool = False) -> dict:
         preview = extract_pdf_text(src.read_bytes()) if src.suffix.lower() == ".pdf" else ""
 
     # 2. 尝试从预览文本里提取标题（失败则保留占位标题）
-    if preview:
+    if preview and payload[0] != "html":
         first_line = next((ln.strip() for ln in preview.splitlines() if len(ln.strip()) > 10), None)
         if first_line:
             title = first_line[:120]

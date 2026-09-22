@@ -12,7 +12,7 @@
    - **可质疑之处**：指出原文未解决的问题、实验局限或需要交叉验证的论断，标"待验证"。
 3. 把 frontmatter 的 `status` 从 `draft` 改为 `current`，`last_verified` 更新为今天；补全 `topics`、`harness_components`、`quality`、`confidence`，必要时补充 `evidence_sources`。
 4. 如果原文值得在已有的概念页（如 `wiki/concepts/` 下的页面）中被引用，在那些页面里加一条 wikilink，避免产生孤儿页。
-5. 运行 `uv run python scripts/lint_wiki.py` 和 `uv run python scripts/compile_index.py` 收尾。
+5. 完成正文后由宿主进行独立语义核验，运行 `uv run python scripts/compile_index.py` 和 `uv run python scripts/lint_wiki.py` 收尾。本次模型不执行 shell，不改索引，不把生成结束写成核验通过。
 
 ## 红线
 

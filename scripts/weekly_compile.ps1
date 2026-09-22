@@ -5,18 +5,13 @@
 #   powershell -File scripts/weekly_compile.ps1
 #
 # DryRun: fetch candidates with --dry-run, score with weekly_update.py --dry-run,
-#         run lint, and check `kimi --version`. It does not write registry, digest,
+#         run lint, and check CLI discovery. It does not write registry, digest,
 #         review queue, wiki pages, or weekly LLM logs.
 # Full run: fetch_candidates.py -> weekly_update.py -> lint_wiki.py ->
-#           agent-memory MCP preflight ->
-#           kimi -p prompts/weekly_compile.md --output-format stream-json ->
+#           Claude selection -> scripted ingest -> Claude compile -> Codex audit ->
 #           compile_index.py -> lint_wiki.py.
 #
-# The kimi invocation runs with the repo root as cwd, so it picks up the
-# project-level .kimi-code/mcp.json (agent-memory MCP server) and the
-# .kimi-code/skills/agent-memory skill. The memory server must be running
-# at http://127.0.0.1:8765 before this script is run; the preflight check
-# below aborts early if it is unreachable.
+# CLI sessions do not inherit Kimi sessions or its memory configuration.
 
 param(
     [switch]$DryRun,
@@ -40,25 +35,27 @@ uv run python scripts/fetch_candidates.py @FetchArgs
 if ($LASTEXITCODE -ne 0) { Write-Error "fetch_candidates.py failed"; exit 1 }
 
 Write-Host "[2/5] weekly_update.py (dedupe, scoring, review queue + digest)"
+$QueuesBefore = @(Get-ChildItem (Join-Path $Root 'data/review_queue') -Filter 'weekly-*.md' -ErrorAction SilentlyContinue | ForEach-Object { $_.FullName })
 $UpdateArgs = @("--date", "$DateStr", "--limit", "$Limit")
 if ($DryRun) { $UpdateArgs += "--dry-run" }
 uv run python scripts/weekly_update.py @UpdateArgs
 if ($LASTEXITCODE -ne 0) { Write-Error "weekly_update.py failed"; exit 1 }
+if (-not $DryRun) {
+    $NewQueues = @(Get-ChildItem (Join-Path $Root 'data/review_queue') -Filter 'weekly-*.md' | Where-Object { $_.FullName -notin $QueuesBefore })
+    if ($NewQueues.Count -eq 0) { Write-Host '[done] no new review batch; skipped LLM calls'; exit 0 }
+    if ($NewQueues.Count -ne 1) { throw 'Multiple new batches detected; select a review queue explicitly.' }
+    $ReviewQueue = $NewQueues[0].FullName
+}
 
 Write-Host "[3/5] lint_wiki.py (pre-compile check)"
 uv run python scripts/lint_wiki.py
 $PreLintExit = $LASTEXITCODE
 
 if ($DryRun) {
-    Write-Host "[dry-run] checking kimi CLI availability"
-    kimi --version
-    Write-Host "[dry-run] checking agent-memory MCP server availability"
-    try {
-        $null = Invoke-WebRequest -Uri "http://127.0.0.1:8765/bootstrap" -UseBasicParsing -TimeoutSec 5
-        Write-Host "[dry-run] agent-memory MCP server reachable"
-    } catch {
-        Write-Warning "[dry-run] memory service unavailable; knowledge processing can continue without memory"
-    }
+    Write-Host "[dry-run] checking configured CLI availability"
+    uv run python -m service.agent_runner weekly --check
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+    Write-Host '[dry-run] Claude memory config is explicitly loaded on real runs; dry-run does not connect'
     Write-Host "[dry-run] LLM compile step skipped. lint exit code: $PreLintExit"
     exit $PreLintExit
 }
@@ -68,29 +65,23 @@ if ($PreLintExit -ne 0) {
     exit $PreLintExit
 }
 
-Write-Host "[4/5] kimi editorial pass with prompts/weekly_compile.md"
+Write-Host "[4/5] Claude editorial pass + Codex independent audit"
 
-# Preflight: the agent-memory MCP server must be up, otherwise the kimi
-# session would run without memory tools. Abort early with a clear message.
-try {
-    $null = Invoke-WebRequest -Uri "http://127.0.0.1:8765/bootstrap" -UseBasicParsing -TimeoutSec 5
-} catch {
-    Write-Warning "Memory service unavailable; continue knowledge processing without memory. Do not bypass pending review gates."
-}
+Write-Host 'Claude explicitly loads agent-memory MCP; pending review gates are preserved.'
 
-$LogFile = Join-Path $LogDir "weekly-$DateStr.jsonl"
-$ErrFile = Join-Path $LogDir "weekly-$DateStr.stderr.log"
+$RunStamp = Get-Date -Format 'yyyy-MM-dd-HHmmss-fff'
+$LogFile = Join-Path $LogDir "weekly-$RunStamp.log"
+$ErrFile = Join-Path $LogDir "weekly-$RunStamp.stderr.log"
 $PromptFile = Join-Path $Root "prompts/weekly_compile.md"
-$Prompt = Get-Content -Raw -Encoding UTF8 $PromptFile
 # PowerShell wraps every native-command stderr line in an error record even
 # when stderr is redirected to a file, and $ErrorActionPreference = "Stop"
-# then aborts the script. Run kimi in a nested scope with Continue instead.
+# then aborts the script. Run the CLI adapter in a nested scope instead.
 & {
     $ErrorActionPreference = "Continue"
-    kimi -p $Prompt --output-format stream-json 2>$ErrFile | Tee-Object -FilePath $LogFile
+    uv run python -m service.agent_runner weekly --prompt-file $PromptFile --review-queue $ReviewQueue 2>$ErrFile | Tee-Object -FilePath $LogFile
 }
-$KimiExit = $LASTEXITCODE
-if ($KimiExit -ne 0) { Write-Error "kimi invocation failed (log: $LogFile, stderr: $ErrFile)"; exit $KimiExit }
+$AgentExit = $LASTEXITCODE
+if ($AgentExit -ne 0) { Write-Error "LLM generation or audit failed (log: $LogFile, stderr: $ErrFile)"; exit $AgentExit }
 
 Write-Host "[5/5] compile_index.py + lint_wiki.py (post-compile check)"
 uv run python scripts/compile_index.py

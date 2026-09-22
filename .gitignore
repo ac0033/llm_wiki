@@ -34,3 +34,6 @@ Thumbs.db
 
 # 运行期会话状态（kimi CLI 会话 id）
 data/state/kb_session.json
+
+# 一次性验收记录与验证脚本，只在本机保留
+data/logs/acceptance-*/

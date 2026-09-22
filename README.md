@@ -4,6 +4,8 @@
 
 ## 目录分层
 
+模型调用入口：`service/agent_runner.py` 用 Claude Code / Opus 5 处理查询、原文理解、候选筛选和跨文献综合，Codex 做独立核验；`chat.ps1` 启动 Claude Code 交互会话。`KB_<角色>_PROVIDER` / `KB_<角色>_MODEL` 可显式配置。入口显式加载 `config/agent-memory.mcp.json` 和 agent-memory skill 镜像，scope 为 `repo:llm-wiki`。抓取、登记、索引与 lint 仍由脚本负责，人工复核边界不变。
+
 - `raw/` — 原始素材层。抓到的 PDF、网页快照、图片，逐字保存，不做改写，是 wiki 页面所有论断的证据来源。
 - `wiki/` — 知识层。Obsidian 可直接打开的 Markdown 页面，按类型分目录：`concepts/`、`papers/`、`systems/`、`benchmarks/`、`comparisons/`、`directions/`、`digests/`、`questions/`。页面之间用 wikilink 互联，例如 `[[agent-harness]]`。
 - `config/` + `data/` — 元数据层（schema 层）。`config/` 存来源、评分细则、研究方向等配置；`data/registry/` 存候选与已入库文献的机器可读登记簿（JSONL）；`data/state/` 存抓取水位线（watermark）；`data/review_queue/` 存等待人工复核的条目。
@@ -75,7 +77,7 @@ uv run python scripts/ingest_source.py 2501.12345
 uv run python scripts/ingest_source.py https://example.com/blog-post
 ```
 
-脚本会做三件确定性工作：把原文下载到 `raw/`、在 `wiki/papers/` 生成一个只填好元数据的草稿页、登记到 `data/registry/ingested.jsonl`。**注意此时正文还是空的**，需要第二步：在 Kimi Code 会话里说「按 prompts/ingest_source.md 补全刚入库的页面」，Kimi 会读 `raw/` 里的原文、撰写正文、补交叉链接，最后跑 lint 和索引重建收尾。也可以一次入库多篇，让 Kimi 逐个补全。
+脚本会做三件确定性工作：把原文下载到 `raw/`、在 `wiki/papers/` 生成一个只填好元数据的草稿页、登记到 `data/registry/ingested.jsonl`。**注意此时正文还是空的**，需要第二步：运行 chat.ps1，在 Claude Code 会话里说「按 prompts/ingest_source.md 补全刚入库的页面」，Claude 会读 `raw/` 里的原文、撰写正文、补交叉链接，最后跑 lint 和索引重建收尾。也可以一次入库多篇，让 Claude 逐个补全。
 
 ### 每周复核（review queue）
 
@@ -83,7 +85,7 @@ uv run python scripts/ingest_source.py https://example.com/blog-post
 
 - 清单位置：`data/review_queue/weekly-<日期>*.md`；同期周报末尾的「待复核交接」小节（`wiki/digests/weekly-<日期>.md`）也会汇总同样的内容，在 Obsidian 里看周报即可。
 - 清单里每条候选前的复选框：`[x]` 表示 weekly_compile 阶段的 Kimi 已给出推荐/暂缓结论并附了理由，**仍在等你确认**，不是最终决定。
-- 确认方式：在 Kimi Code 会话里说「带我过一遍本周待复核清单」。Kimi 会逐条讲解推荐理由，你口头给出决定（入库 / 放弃 / 先放着），由它把结论写回清单并执行入库——不需要你手动编辑清单文件。
+- 确认方式：运行 chat.ps1，在 Claude Code 会话里说「带我过一遍本周待复核清单」。Claude 会逐条讲解推荐理由，你口头给出决定（入库 / 放弃 / 先放着），由它把结论写回清单并执行入库——不需要你手动编辑清单文件。
 
 ## MCP 接入
 
